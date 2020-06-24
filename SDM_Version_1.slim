@@ -1,0 +1,275 @@
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//// Initialization step
+
+initialize() {
+	
+	
+	defineConstant("start", clock());	///// to track time	
+	if (exists("seed")==1){
+		setSeed(asInteger(seed));       ///// set a seed from input
+	}
+	
+	
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//// Setting up the simulation
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	initializeSLiMModelType("nonWF");
+	initializeSLiMOptions(dimensionality="xy", nucleotideBased=F);
+	initializeMutationType("m1", 0.0, "f", 0.0);    //// 1 kind of mutation - Neutral
+	initializeGenomicElementType("g1", m1, 1);      ////
+	m1.convertToSubstitution = T;
+	initializeMutationRate(0);                    ///// Mutation rate not used because of tree sequencing
+	initializeGenomicElement(g1, 0, 8000001 - 1);   ///// Our Genome
+	initializeRecombinationRate(0);            ///// FLAT Reacombination Rate
+	defineConstant("Length", 8000000);
+	
+	
+	if (exists("PAR")==0){
+		defineConstant("paramtersfile",readFile('Parameters.txt'));
+	}
+	
+	else{
+		defineConstant("paramtersfile",readFile(PAR));
+	}
+	
+	
+	defineConstant("MATRIX_DIMS", asFloat(strsplit(paramtersfile[0],' ')));
+	
+	
+	
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////	
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//// PARAMETERS
+
+	defineConstant("ID", 'SDM');
+	
+	if (exists('sigma')==0){
+		defineConstant("sigma", 1);
+	}
+	
+	
+	
+	if (exists('K')==0){
+		defineConstant("K",1);  // carrying-capacity per unit square (roughly)
+	}
+
+	
+	defineConstant("SD", sigma);  // sigma_D, the dispersal distance
+	defineConstant("SI", sigma);  // sigma_I, the spatial interaction distance
+	defineConstant("SM", sigma);  // sigma_M, the mate choice distance
+
+	defineConstant("L", 4);    // mean lifetime at stationarity
+	defineConstant("W", "NA");  // width and height of the simulated area
+	defineConstant("G", 1e8);  // genome length
+	defineConstant("FECUN", 1/L); // mean fecundity
+	defineConstant("RHO", FECUN/((1+FECUN) * K)); // constant in spatial competition function
+	
+
+	///////////////////////////////////////////////////////////////////////////////////////////////	
+	///////////////////////////////////////////////////////////////////////////////////////////////
+	
+	
+	defineConstant('OUT_NAME',paste(c('OUT_SED',asString(getSeed()),asString(ID),'Sigma',asString(sigma),'K',K),'_')); ///Output name
+	
+	
+	
+	// spatial competition
+	initializeInteractionType(1, "xy", reciprocal=T, maxDistance=SI * 3);
+	i1.setInteractionFunction("n", (1.0/(2*PI*SI^2)), SI);
+	
+	// mate choice
+	initializeInteractionType(2, "xy", reciprocal=T, maxDistance=SM * 3);
+	i2.setInteractionFunction("n", 1.0/(2*PI*SM^2), SM);
+
+}
+
+
+
+
+
+reproduction() {
+	
+	mate = i2.drawByStrength(individual, 1);
+	if (mate.size()) {
+		nOff = rpois(1, FECUN);
+		POS=individual.spatialPosition; //// position of birther
+		
+		// CircleOfPositions=c(c(SD,0),c(SD,SD),c(0,SD),c(-SD,SD),c(-SD,0),c(-SD,-SD),c(0,-SD),c(SD,-SD));  //// 8 points around individual at SD distance
+		// AngleOfPositions=c(0,45,90,135,180,225,270,315);
+		
+		
+		for (i in seqLen(nOff)) {
+			
+			pos = POS + rnorm(2, 0, SD);
+			
+			if ( (p1.pointInBounds(pos)) | ( pos[0]>=0 & pos[1]>=0 & pos[0]<=MATRIX_DIMS[0] & pos[1]<=MATRIX_DIMS[1] )  ) { //// Check if new position is within bounds, make birth happen
+				offspring = subpop.addCrossed(individual, mate);
+				offspring.setSpatialPosition(pos);
+			}
+		
+		
+		}
+	}
+	return;
+
+}
+
+
+
+
+
+
+1 early() {
+	
+
+	sim.addSubpop("p1", 2000); //// Initial Size
+	
+	///// Read files o maps
+
+
+	
+	X = readFile("./test_SDM_vector_small_transition_nrow_40_ncol_60.txt");    //// Load SDM
+	p1.setSpatialBounds(c(0.5, 0.5, MATRIX_DIMS[0]-0.5, MATRIX_DIMS[1]-0.5));  //// Spatial Bounds of Population, adjusted with -0.5 and starting from 0.5 because of issues later
+	
+	X[which(X=="NA")] = 0.0;    //// make any NA into a zero
+	X[which(X<=0)] = 0.0;       //// Any weird less than zero value is zerofied
+	
+	X = asFloat(X);             //// Make sure everything is a float, if not error appears here
+	X = matrix(X, nrow=asInteger(MATRIX_DIMS[0]),ncol=asInteger(MATRIX_DIMS[1]),byrow=T);   //// Re-arange matrix to correct directions
+
+
+	p1.setValue("ENV_MATRIX",X);   //// Store the enviroment matrix as a Slim Value of population 1
+	p1.defineSpatialMap("map1", "xy", dim(X), X, interpolate=F,valueRange=range(X), colors=c("white","red","orange","yellow","green","blue")); //// Set up the enviroment of the simulation using the matrix
+	
+	
+	
+	for (ind in p1.individuals) { //// Set up Population
+		ENV=0;
+		while (ENV<=0.05){  //// Initial population is placed on map, in positions that the enviroment is 0 (>=0.05)
+		
+		POS=p1.pointUniform();
+		ENV= p1.spatialMapValue("map1", POS);
+		}
+		
+		ind.setSpatialPosition(POS);
+	}
+	
+	
+	
+	writeFile(OUT_NAME+'.all_ind_info',paste(c('Generation','ID','X','Y','FitnessScale','Age','Optimum','Competition'),'\t'),append=F); //// create output file
+	
+	i1.evaluate();
+}
+
+
+
+
+
+early() {
+	i1.evaluate(p1);
+	inds = p1.individuals;
+	competition = i1.totalOfNeighborStrengths(inds);
+	
+
+	location = inds.spatialPosition; ////get the x and y value of each individual
+	optimum = p1.spatialMapValue("map1", location);
+	
+
+	
+	inds.fitnessScaling = pmin(0.95, optimum/(optimum + RHO * (competition+0.00001)) );
+	//// This is the Fitness function used, notice the 0.00001 to avoid having a /0 division
+
+
+	Competitions=rep(0.0,length(inds));    //// will add generations Competition here
+	FitnessScalers=rep(0.0,length(inds));  //// will add generations Fitness here
+	
+	for (x in inds){
+		Competitions[x.index]=i1.totalOfNeighborStrengths(x);
+		FitnessScalers[x.index]=x.fitnessScaling;
+	}
+	
+	p1.setValue("Competitions",Competitions);  //// Store them
+	p1.setValue("FitnessScalers",FitnessScalers);
+
+
+
+	//// Previously used to fix boundary effect, needs adjustment if to be used
+	//// inds.fitnessScaling = inds.fitnessScaling * pmin(sqrt(inds.x/SI), 1.0) * pmin(sqrt(inds.y/SI), 1.0) * pmin(sqrt((W - inds.x)/SI), 1.0) * pmin(sqrt((W - inds.y)/SI), 1.0);
+
+}
+
+
+
+1: late() {
+	//// to be ready for mate choice
+	i2.evaluate(p1);
+}
+
+
+
+
+2: late() {
+	
+	GEN=sim.generation;
+	
+	
+	if (p1.individualCount<=1)
+	{//// Terminate and print message if there is a collapse
+		print('Population Total Collapse');
+		sim.simulationFinished();
+	}
+
+
+
+	
+	if ( (GEN>=0 & GEN%1==0) )
+	{////when to make matrics
+		
+		INDS=p1.individuals;
+
+		// Output ID, position and Enviromenet for each individual
+		ALLPOS=NULL;
+		Competitions=p1.getValue("Competitions");
+		FitnessScalers=p1.getValue("FitnessScalers");
+		// Optimums=p1.getValue("Optimums");
+		
+		for (INDHERE in INDS){ /// costly in time
+			ALLPOS=c(ALLPOS,paste(c(asString(GEN),asString(INDHERE.index),asString(INDHERE.spatialPosition[0]),asString(INDHERE.spatialPosition[1]),asString(FitnessScalers[INDHERE.index]),asString(INDHERE.age),asString(p1.spatialMapValue("map1",INDHERE.spatialPosition)),asString(Competitions[INDHERE.index])),'\t'));
+		}
+		writeFile(OUT_NAME+'.all_ind_info',paste(ALLPOS,'\n'),append=T);
+		
+	
+	
+	
+	}////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
+	
+	///// Print out stats evey x generations
+	if (GEN % 5 == 0){
+		print(paste(c('Population Size: ',p1.individualCount),'\t'));
+		print(paste(c('Generation: ',sim.generation),'\t'));
+		print(clock());
+		print(date());
+
+
+	}
+	
+
+
+}   //// Finito
+
+//// schedule final state 1000 generations after increase starts
+1 {
+	sim.rescheduleScriptBlock(s0, start=300, end=300);
+}
+
+s0 300 late()
+{////maximum reach of simulation, if it does not terminate
+	print("simulation finished at "+sim.generation+" with N="+p1.individualCount);
+	sim.simulationFinished();
+}
+
