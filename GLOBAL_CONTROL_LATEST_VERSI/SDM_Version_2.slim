@@ -38,8 +38,8 @@ initialize() {
 		defineConstant("paramtersfile",readFile(PAR));
 	}
 	
-	
-	defineConstant("MATRIX_DIMS", asFloat(strsplit(paramtersfile[0],' ')));
+
+
 	
 	
 	
@@ -103,9 +103,12 @@ reproduction() {
 		nOff = rpois(1, FECUN);
 		POS=individual.spatialPosition; //// position of birther
 		
+		//'Smart Movement', currently off
 		// CircleOfPositions=c(c(SD,0),c(SD,SD),c(0,SD),c(-SD,SD),c(-SD,0),c(-SD,-SD),c(0,-SD),c(SD,-SD));  //// 8 points around individual at SD distance
 		// AngleOfPositions=c(0,45,90,135,180,225,270,315);
 		
+		MATRIX_DIMS=p1.getValue('MATRIX_DIMS');
+				
 		
 		for (i in seqLen(nOff)) {
 			
@@ -136,8 +139,12 @@ reproduction() {
 	///// Read files o maps
 
 
+	MAP_COUNTER=0;
+	X = readFile("./" + strsplit(paramtersfile[MAP_COUNTER],' ')[0] );    //// Load SDM
+	MATRIX_DIMS=c( asFloat(strsplit(paramtersfile[MAP_COUNTER],' ')[1]) , asFloat(strsplit(paramtersfile[MAP_COUNTER],' ')[2]) ) ;
 	
-	X = readFile("./test_SDM_vector_small_transition_nrow_40_ncol_60.txt");    //// Load SDM
+	
+	
 	p1.setSpatialBounds(c(0.5, 0.5, MATRIX_DIMS[0]-0.5, MATRIX_DIMS[1]-0.5));  //// Spatial Bounds of Population, adjusted with -0.5 and starting from 0.5 because of issues later
 	
 	X[which(X=="NA")] = 0.0;    //// make any NA into a zero
@@ -148,8 +155,11 @@ reproduction() {
 
 
 	p1.setValue("ENV_MATRIX",X);   //// Store the enviroment matrix as a Slim Value of population 1
-	p1.defineSpatialMap("map1", "xy", dim(X), X, interpolate=F,valueRange=range(X), colors=c("white","red","orange","yellow","green","blue")); //// Set up the enviroment of the simulation using the matrix
 	
+	p1.defineSpatialMap("map1", "xy", dim(X), X, interpolate=F,valueRange=range(X), colors=c("white","red","orange","yellow","green","blue")); //// Set up the enviroment of the simulation using the matrix
+	p1.setValue("MATRIX_DIMS",MATRIX_DIMS);
+	p1.setValue("MAP_COUNTER",MAP_COUNTER);
+	p1.setValue("MAP_TIMER",asFloat(strsplit(paramtersfile[MAP_COUNTER+1],' ')[3]));
 	
 	
 	for (ind in p1.individuals) { //// Set up Population
@@ -195,6 +205,11 @@ early() {
 	//// This is the Fitness function used, notice the 0.00001 to avoid having a /0 division
 	}
 
+	
+	
+
+	
+
 
 
 	Competitions=rep(0.0,length(inds));    //// will add generations Competition here
@@ -228,6 +243,46 @@ early() {
 2: late() {
 	
 	GEN=sim.generation;
+	
+	
+	if ( (GEN >= p1.getValue("MAP_TIMER")) & (p1.getValue("MAP_COUNTER") < length(paramtersfile)-1 )  ){
+	
+		MAP_COUNTER=p1.getValue("MAP_COUNTER")+1;
+		
+		X = readFile("./" + strsplit(paramtersfile[MAP_COUNTER],' ')[0] );    //// Load SDM
+		MATRIX_DIMS=c( asFloat(strsplit(paramtersfile[MAP_COUNTER],' ')[1]) , asFloat(strsplit(paramtersfile[MAP_COUNTER],' ')[2]) ) ;
+		
+		
+		
+		p1.setSpatialBounds(c(0.5, 0.5, MATRIX_DIMS[0]-0.5, MATRIX_DIMS[1]-0.5));  //// Spatial Bounds of Population, adjusted with -0.5 and starting from 0.5 because of issues later
+		
+		X[which(X=="NA")] = 0.0;    //// make any NA into a zero
+		X[which(X<=0)] = 0.0;       //// Any weird less than zero value is zerofied
+		
+		X = asFloat(X);             //// Make sure everything is a float, if not error appears here
+		X = matrix(X, nrow=asInteger(MATRIX_DIMS[0]),ncol=asInteger(MATRIX_DIMS[1]),byrow=T);   //// Re-arange matrix to correct directions
+		
+		
+		p1.setValue("ENV_MATRIX",X);   //// Store the enviroment matrix as a Slim Value of population 1
+		
+		p1.defineSpatialMap("map1", "xy", dim(X), X, interpolate=F,valueRange=range(X), colors=c("white","red","orange","yellow","green","blue")); //// Set up the enviroment of the simulation using the matrix
+		p1.setValue("MATRIX_DIMS",MATRIX_DIMS);
+		p1.setValue("MAP_COUNTER",MAP_COUNTER);
+		//
+		print(MAP_COUNTER);
+		print(MATRIX_DIMS);
+		print(p1.getValue("MAP_TIMER"));
+		print(length(paramtersfile));
+		//
+		if(p1.getValue("MAP_COUNTER") < length(paramtersfile)-1 ){
+			p1.setValue("MAP_TIMER",asFloat(strsplit(paramtersfile[MAP_COUNTER+1],' ')[3]));
+		}	
+	}
+	
+	
+	
+	
+	
 	
 	
 	if (p1.individualCount<=1)
@@ -267,12 +322,15 @@ early() {
 		print(paste(c('Generation: ',sim.generation),'\t'));
 		print(clock());
 		print(date());
-		J=seq(1,16);
-		print(matrix(J,4,4));
-		print(paste(J,sep="_"));
+
 		
 
 	}
+	
+	
+	
+	
+	
 	
 
 
@@ -280,10 +338,10 @@ early() {
 
 //// schedule final state 1000 generations after increase starts
 1 {
-	sim.rescheduleScriptBlock(s0, start=300, end=300);
+	sim.rescheduleScriptBlock(s0, start=800, end=800);
 }
 
-s0 300 late()
+s0 800 late()
 {////maximum reach of simulation, if it does not terminate
 	print("simulation finished at "+sim.generation+" with N="+p1.individualCount);
 	sim.simulationFinished();
