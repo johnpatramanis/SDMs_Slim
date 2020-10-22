@@ -1,0 +1,3 @@
+why 4 individulas per grid when K=1 ?
+Difference between different occurance between Ks 
+Different Sigmas for spacial interactions
