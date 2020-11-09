@@ -8,7 +8,7 @@ from skbio.stats.distance import mantel
 ###### import original evn map
 
 
-MAP_FILE=open('test_SDM_vector_small_transition_nrow_40_ncol_60.txt','r')
+MAP_FILE=open('test_SDM_vector_small_highParea_nrow_40_ncol_60.txt','r')
 ORIGINAL_MAP=[]
 for line in MAP_FILE:
     line=line.strip()

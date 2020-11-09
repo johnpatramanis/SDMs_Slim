@@ -1,0 +1,3 @@
+test_SDM_vector_small_highParea_nrow_40_ncol_60.txt 40 60 0 0
+test_SDM_vector_small_highParea_nrow_40_ncol_60.txt 40 60 200 0
+test_SDM_vector_small_highParea_nrow_40_ncol_60.txt 40 60 400 0
